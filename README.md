@@ -29,22 +29,23 @@ Actions prioritaires :
 
 ## ✅ Tâche 1 — Préparation du workspace et vérification de l'APK
 
-### Création du dossier et navigation
+### Vérification hexadécimale — magic bytes
 
 ```powershell
 mkdir C:\APK-Analysis
 cd C:\APK-Analysis
-```
-
-### Vérification hexadécimale — magic bytes
-
-```powershell
 Get-Content -Path C:\APK-Analysis\UnCrackable-Level1.apk -TotalCount 4 | Format-Hex
 ```
 
-Les 4 premiers octets doivent afficher `50 4B 03 04` — signature **PK** confirmant une archive ZIP valide.
+Les 4 premiers octets affichent `50 4B 03 04` — signature **PK** confirmant une archive ZIP valide ✅
 
-![Vérification hexadécimale des magic bytes PK](6.png)
+![Vérification hexadécimale des magic bytes PK dans PowerShell](1.png)
+
+---
+
+### Téléchargement de l'APK depuis OWASP MAS
+
+![Téléchargement de l'APK depuis le site officiel OWASP](2.png)
 
 ---
 
@@ -54,11 +55,10 @@ Les 4 premiers octets doivent afficher `50 4B 03 04` — signature **PK** confir
 Add-Type -Assembly System.IO.Compression.FileSystem
 $apk = "C:\APK-Analysis\UnCrackable-Level1.apk"
 [System.IO.Compression.ZipFile]::OpenRead($apk).Entries | Select-Object -ExpandProperty FullName -First 20
-
 Get-FileHash -Algorithm SHA256 C:\APK-Analysis\UnCrackable-Level1.apk
 ```
 
-![Contenu de l'APK listé et hash SHA-256 calculé](8.png)
+![Contenu de l'APK listé et hash SHA-256 calculé](3.png)
 
 **Résultats obtenus :**
 - Magic bytes `50 4B` confirmés → archive ZIP valide ✅
@@ -69,9 +69,7 @@ Get-FileHash -Algorithm SHA256 C:\APK-Analysis\UnCrackable-Level1.apk
 
 ## ✅ Tâche 2 — Obtention de l'APK
 
-APK téléchargé depuis le dépôt officiel OWASP MAS. Provenance vérifiée, taille notée (66 651 octets).
-
-![Téléchargement de l'APK depuis le site officiel OWASP](7.png)
+APK téléchargé depuis le dépôt officiel OWASP MAS. Provenance vérifiée, taille notée (66 651 octets), hash calculé pour traçabilité.
 
 ---
 
@@ -85,13 +83,13 @@ C:\Users\hp elitbook\Downloads\jadx-1.5.5\bin\jadx-gui.bat
 
 Ouverture via **File > Open file...** → sélection de `UnCrackable-Level1.apk`
 
-![Structure de l'APK dans JADX GUI — vue générale MainActivity](9.png)
+![Structure de l'APK dans JADX GUI — vue générale MainActivity](4.png)
 
 ---
 
 ### Analyse de MainActivity — détections au démarrage
 
-![MainActivity avec logique de détection root et debuggable](10.png)
+![MainActivity avec logique de détection root et debuggable](5.png)
 
 Dans la méthode `onCreate()`, on identifie deux vérifications critiques :
 
@@ -108,9 +106,9 @@ if (b.a(getApplicationContext())) {
 
 ---
 
-### Découverte de la clé AES dans la classe `sg.vantagepoint.a.b`
+### Découverte de la clé AES dans `sg.vantagepoint.a.b`
 
-![Clé AES et message chiffré Base64 visibles dans le code](11.png)
+![Clé AES et message chiffré Base64 visibles dans le code](6.png)
 
 La clé de chiffrement et le message sont **stockés en clair dans le bytecode** :
 
@@ -124,13 +122,13 @@ La clé de chiffrement et le message sont **stockés en clair dans le bytecode**
 
 ## ✅ Tâche 4 — Recherche de chaînes sensibles
 
-### Recherche dans JADX — terme "debug"
-
-![Recherche du terme debug dans JADX — 1 résultat](16.png)
-
 ### Recherche dans JADX — terme "log"
 
-![Recherche du terme log dans JADX — 21 résultats](15.png)
+![Recherche du terme log dans JADX — 21 résultats](10.png)
+
+### Recherche dans JADX — terme "debug"
+
+![Recherche du terme debug dans JADX — 1 résultat](11.png)
 
 **Tableau des recherches effectuées :**
 
@@ -160,7 +158,7 @@ $dex | ForEach-Object {
 $zip.Dispose()
 ```
 
-![Extraction du DEX depuis l'APK PowerShell](1.png)
+![Extraction du DEX depuis l'APK via PowerShell](7.png)
 
 ### Conversion DEX → JAR
 
@@ -169,7 +167,7 @@ cd "C:\Users\hp elitbook\Downloads\dex-tools-v2.4\dex-tools-v2.4"
 .\d2j-dex2jar.bat "C:\APK-Analysis\classes.dex" -o "C:\APK-Analysis\app.jar"
 ```
 
-![Résultat de la conversion dex2jar — app.jar généré](13.png)
+![Résultat de la conversion dex2jar — app.jar généré avec succès](8.png)
 
 Fichier `app.jar` généré : **5 967 octets** ✅
 
@@ -183,7 +181,7 @@ Fichier `app.jar` généré : **5 967 octets** ✅
 java -jar "C:\Users\hp elitbook\Downloads\jd-gui-1.6.6-min.jar"
 ```
 
-![JD-GUI avec MainActivity.class décompilée depuis app.jar](14.png)
+![JD-GUI avec MainActivity.class décompilée depuis app.jar](9.png)
 
 **Tableau comparatif :**
 
@@ -202,9 +200,9 @@ java -jar "C:\Users\hp elitbook\Downloads\jd-gui-1.6.6-min.jar"
 
 ## 🔓 Déchiffrement du secret — AES-ECB
 
-### Script Python utilisé
+### Script Python `decrypt.py`
 
-![Script Python decrypt.py avec clé AES et Base64](12.png)
+![Script Python decrypt.py avec clé AES et Base64](14.png)
 
 ```python
 from Crypto.Cipher import AES
@@ -217,9 +215,14 @@ secret = cipher.decrypt(encrypted)
 print("Secret :", secret.decode('utf-8').strip())
 ```
 
-### Exécution et résultat
+### Installation et exécution
 
-![Exécution de decrypt.py — secret I want to believe trouvé](2.png)
+```powershell
+pip install pycryptodome
+python decrypt.py
+```
+
+![Exécution de decrypt.py — secret I want to believe trouvé](12.png)
 
 ```
 🔓 Secret trouvé : I want to believe
@@ -303,9 +306,9 @@ Move-Item C:\APK-Analysis\app.jar C:\APK-Analysis\results\
 Remove-Item C:\APK-Analysis\classes.dex
 ```
 
-![Création du dossier results et organisation des fichiers](4.png)
+![Organisation des fichiers et nettoyage du workspace](15.png)
 
-![Structure finale du workspace après nettoyage](5.png)
+![Structure finale du workspace après nettoyage](16.png)
 
 ---
 
@@ -319,6 +322,16 @@ Remove-Item C:\APK-Analysis\classes.dex
 | 4 | Vérification du secret côté client | 🔴 Élevée |
 | 5 | Anti-root/debug contournables en Java | 🟡 Moyenne |
 | 6 | Clé AES + secret codés en dur | 🔴 Élevée |
+
+---
+
+## Annexes
+
+### Permissions demandées
+Aucune permission `uses-permission` déclarée dans le manifeste.
+
+### Composants exportés
+- `sg.vantagepoint.uncrackable1.MainActivity` — exportée implicitement via `intent-filter` (action MAIN, catégorie LAUNCHER)
 
 ---
 
